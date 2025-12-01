@@ -242,10 +242,21 @@
             db = firebase.firestore();
             isFirebaseReady = true;
 
-            auth.onAuthStateChanged(user => {
+            auth.onAuthStateChanged(async (user) => {
+                const wasLoggedOut = currentUser === null;
                 currentUser = user;
                 updateAuthUI(user);
-                user ? loadFromCloud() : loadFromLocal();
+
+                if (user && wasLoggedOut) {
+                    // User just logged in - sync local data to cloud first
+                    await syncLocalToCloud();
+                } else if (user) {
+                    // User was already logged in - just load cloud data
+                    loadFromCloud();
+                } else {
+                    // User is logged out - load from local storage
+                    loadFromLocal();
+                }
             });
         } catch (e) {
             console.error("Firebase Init Error:", e);
@@ -305,6 +316,66 @@
             const stored = localStorage.getItem('birthdays');
             birthdays = stored ? JSON.parse(stored) : [];
             renderList();
+        }
+
+        async function syncLocalToCloud() {
+            if (!currentUser || !isFirebaseReady) return;
+
+            // Get local storage data
+            const stored = localStorage.getItem('birthdays');
+            const localBirthdays = stored ? JSON.parse(stored) : [];
+
+            if (localBirthdays.length === 0) {
+                // No local data to sync, just load from cloud
+                loadFromCloud();
+                return;
+            }
+
+            try {
+                const userRef = db.collection('users').doc(currentUser.uid).collection('birthdays');
+
+                // Fetch existing cloud data
+                const snapshot = await userRef.get();
+                const cloudBirthdays = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                // Deduplicate: only add local items that don't exist in cloud
+                // Duplicate check: same name (case-insensitive) AND same date
+                const newEntries = localBirthdays.filter(local => {
+                    const isDuplicate = cloudBirthdays.some(cloud =>
+                        cloud.name.toLowerCase() === local.name.toLowerCase() &&
+                        cloud.date === local.date
+                    );
+                    return !isDuplicate;
+                });
+
+                // Upload new entries to cloud
+                const uploadPromises = newEntries.map(entry => {
+                    const { id, ...data } = entry; // Remove local ID
+                    return userRef.add(data);
+                });
+
+                await Promise.all(uploadPromises);
+
+                // Clear local storage after successful sync
+                localStorage.removeItem('birthdays');
+
+                // Show sync result to user
+                if (newEntries.length > 0) {
+                    showToast(`Synced ${newEntries.length} moment${newEntries.length > 1 ? 's' : ''} to cloud!`);
+                } else {
+                    showToast('All moments already synced!');
+                }
+
+                // Now load from cloud (will set up real-time listener)
+                loadFromCloud();
+            } catch (error) {
+                console.error('Sync error:', error);
+                showToast('Sync failed. Loading cloud data...', true);
+                loadFromCloud();
+            }
         }
 
         function loadFromCloud() {
