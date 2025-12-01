@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Birthday Reminder</title>
+    
+    <!-- PWA Settings -->
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Birthdays">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            background-color: #f3f4f6;
+            user-select: none;
+        }
+
+        /* Animations */
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .modal-animate {
+            animation: slideUp 0.3s ease-out forwards;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Card Interactions */
+        .birthday-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            aspect-ratio: 2/3; /* Enforce 4x6 portrait ratio */
+        }
+        .birthday-card:active {
+            transform: scale(0.96);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-24">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white pt-12 pb-6 px-6 shadow-lg rounded-b-3xl relative overflow-hidden mb-6">
+        <div class="absolute top-0 right-0 opacity-10 text-9xl transform translate-x-10 -translate-y-10 pointer-events-none">
+            <i class="fa-solid fa-cake-candles"></i>
+        </div>
+
+        <div class="relative z-10 flex justify-between items-start mb-4">
+            <div>
+                <p class="text-indigo-200 text-xs font-bold uppercase tracking-wider" id="currentDateDisplay">Loading...</p>
+                <h1 class="text-3xl font-bold mt-1">Birthdays</h1>
+                <p id="storage-indicator" class="text-xs text-indigo-200 mt-1 flex items-center gap-1">
+                    <i class="fa-solid fa-database"></i> <span>Local Storage</span>
+                </p>
+            </div>
+
+            <div class="flex gap-2">
+                <!-- Login Button -->
+                <button id="login-btn" onclick="googleLogin()" class="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-3 py-2 rounded-full text-xs font-bold transition flex items-center gap-2">
+                    <i class="fa-brands fa-google"></i> Sync
+                </button>
+
+                <!-- Profile -->
+                <div id="user-profile" class="hidden relative">
+                    <img id="user-avatar" src="" onclick="toggleProfileMenu()" class="w-9 h-9 rounded-full border-2 border-indigo-300 cursor-pointer" alt="Profile">
+                    <div id="profile-menu" class="hidden absolute top-10 right-0 bg-white text-gray-800 shadow-xl rounded-xl p-2 min-w-[120px] z-50">
+                        <button onclick="googleLogout()" class="w-full text-left text-sm text-red-500 font-medium hover:bg-red-50 px-3 py-2 rounded-lg transition flex items-center gap-2">
+                            <i class="fa-solid fa-right-from-bracket"></i> Logout
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bell -->
+                <button onclick="requestNotificationPermission()" class="bg-white/20 hover:bg-white/30 p-2 w-9 h-9 rounded-full backdrop-blur-sm transition flex items-center justify-center">
+                    <i class="fa-solid fa-bell text-white text-sm"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="px-4 max-w-xl mx-auto" id="appContent">
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden flex flex-col items-center justify-center mt-20 text-gray-400">
+            <i class="fa-regular fa-calendar-plus text-6xl mb-4 text-gray-300"></i>
+            <p class="text-lg font-medium text-gray-500">No birthdays yet!</p>
+            <p class="text-sm">Tap + to add one.</p>
+        </div>
+
+        <!-- Birthday Grid (Changed to Grid for side-by-side) -->
+        <div id="birthdayList" class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <!-- Cards injected via JS -->
+        </div>
+    </main>
+
+    <!-- Floating Action Button -->
+    <button onclick="openModal()" class="fixed bottom-6 right-6 bg-indigo-600 text-white w-14 h-14 rounded-full shadow-xl shadow-indigo-400/40 flex items-center justify-center text-2xl hover:bg-indigo-700 active:scale-90 transition z-30">
+        <i class="fa-solid fa-plus"></i>
+    </button>
+
+    <!-- Add/Edit Modal -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/50 z-40 hidden backdrop-blur-sm transition-opacity" onclick="closeModalOutside(event)">
+        <div id="modalContent" class="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl p-6 modal-animate max-w-md mx-auto w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800" id="modalTitle">Add Birthday</h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <form id="birthdayForm" onsubmit="handleFormSubmit(event)">
+                <input type="hidden" id="editId">
+                
+                <div class="mb-4">
+                    <label class="block text-gray-500 text-xs font-bold uppercase mb-2">Name</label>
+                    <div class="relative">
+                        <i class="fa-regular fa-user absolute left-4 top-4 text-gray-400"></i>
+                        <input type="text" id="nameInput" required placeholder="e.g. John Doe" 
+                            class="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-gray-500 text-xs font-bold uppercase mb-2">Date</label>
+                    <input type="date" id="dateInput" required 
+                        class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition text-gray-700">
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" id="deleteBtn" onclick="deleteBirthday()" class="hidden flex-1 bg-red-50 text-red-500 py-3 rounded-xl font-bold hover:bg-red-100 transition">
+                        Delete
+                    </button>
+                    <button type="submit" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-200">
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-4 left-4 right-4 bg-gray-800 text-white p-4 rounded-xl shadow-2xl transform -translate-y-40 transition-transform duration-300 z-50 flex items-center gap-3 justify-center">
+        <i class="fa-solid fa-circle-info text-blue-400" id="toastIcon"></i>
+        <span id="toastMsg" class="font-medium text-sm">Action Successful</span>
+    </div>
+
+    <script>
+        // ==========================================
+        // FIREBASE CONFIG
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyC5bgHDNhcrJfhSweCQz0CA0uEEuc05um0",
+            authDomain: "birthday-reminder-yuva.firebaseapp.com",
+            projectId: "birthday-reminder-yuva",
+            storageBucket: "birthday-reminder-yuva.firebasestorage.app",
+            messagingSenderId: "615674453004",
+            appId: "1:615674453004:web:3d4e6d8f9030645249a229",
+            measurementId: "G-6ZVBS4Y7TX"
+        };
+        let auth, db, currentUser = null;
+        let isFirebaseReady = false;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            db = firebase.firestore();
+            isFirebaseReady = true;
+
+            auth.onAuthStateChanged(user => {
+                currentUser = user;
+                updateAuthUI(user);
+                user ? loadFromCloud() : loadFromLocal();
+            });
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+            loadFromLocal();
+        }
+
+        // ==========================================
+        // APP LOGIC
+        // ==========================================
+        let birthdays = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCurrentDate();
+            setupManifest();
+            if (!isFirebaseReady) loadFromLocal();
+        });
+
+        // --- Auth Functions ---
+        function googleLogin() {
+            if (!isFirebaseReady) return alert("Firebase not configured.");
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(err => alert(err.message));
+        }
+
+        function googleLogout() {
+            auth.signOut();
+            birthdays = [];
+            loadFromLocal();
+        }
+
+        function updateAuthUI(user) {
+            const loginBtn = document.getElementById('login-btn');
+            const userProfile = document.getElementById('user-profile');
+            const userAvatar = document.getElementById('user-avatar');
+            const storageInd = document.getElementById('storage-indicator');
+
+            if (user) {
+                loginBtn.classList.add('hidden');
+                userProfile.classList.remove('hidden');
+                userAvatar.src = user.photoURL;
+                storageInd.innerHTML = `<i class="fa-brands fa-google"></i> <span>Synced to Cloud</span>`;
+            } else {
+                loginBtn.classList.remove('hidden');
+                userProfile.classList.add('hidden');
+                storageInd.innerHTML = `<i class="fa-solid fa-database"></i> <span>Local Storage</span>`;
+            }
+            document.getElementById('profile-menu').classList.add('hidden');
+        }
+
+        function toggleProfileMenu() {
+            document.getElementById('profile-menu').classList.toggle('hidden');
+        }
+
+        // --- Data Handling ---
+        
+        function loadFromLocal() {
+            const stored = localStorage.getItem('birthdays');
+            birthdays = stored ? JSON.parse(stored) : [];
+            renderList();
+        }
+
+        function loadFromCloud() {
+            if (!currentUser) return;
+            const userRef = db.collection('users').doc(currentUser.uid).collection('birthdays');
+            
+            userRef.onSnapshot(snapshot => {
+                birthdays = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                renderList();
+            });
+        }
+
+        function saveData(birthdayData, isDelete = false, idToDelete = null) {
+            if (currentUser && isFirebaseReady) {
+                // Cloud Mode
+                const userRef = db.collection('users').doc(currentUser.uid).collection('birthdays');
+                if (isDelete && idToDelete) {
+                    userRef.doc(idToDelete).delete();
+                } else if (birthdayData) {
+                    if (birthdayData.id) {
+                        const { id, ...data } = birthdayData;
+                        userRef.doc(id).set(data);
+                    } else {
+                        userRef.add(birthdayData);
+                    }
+                }
+            } else {
+                // Local Mode
+                if (isDelete && idToDelete) {
+                    birthdays = birthdays.filter(b => b.id !== idToDelete);
+                } else if (birthdayData) {
+                    const index = birthdays.findIndex(b => b.id === birthdayData.id);
+                    if (index !== -1) {
+                        birthdays[index] = birthdayData;
+                    } else {
+                        birthdays.push(birthdayData);
+                    }
+                }
+                localStorage.setItem('birthdays', JSON.stringify(birthdays));
+                renderList();
+            }
+        }
+
+        // --- Business Logic ---
+
+        function updateCurrentDate() {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('currentDateDisplay').textContent = new Date().toLocaleDateString('en-US', options);
+        }
+
+        function getNextBirthday(dateStr) {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const birthDate = new Date(dateStr);
+            let nextBday = new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate());
+            
+            if (nextBday < today) {
+                nextBday.setFullYear(today.getFullYear() + 1);
+            }
+            return nextBday;
+        }
+
+        function getDaysUntil(dateStr) {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const nextBday = getNextBirthday(dateStr);
+            const diffTime = Math.abs(nextBday - today);
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('birthdayList');
+            const emptyEl = document.getElementById('emptyState');
+            
+            listEl.innerHTML = '';
+
+            if (birthdays.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+
+            birthdays.sort((a, b) => getDaysUntil(a.date) - getDaysUntil(b.date));
+
+            birthdays.forEach(person => {
+                const daysUntil = getDaysUntil(person.date);
+                const bdayDate = new Date(person.date);
+                const dateDisplay = bdayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                // UI Logic
+                let cardColor = "bg-white border-gray-100";
+                let daysText = `<span class="text-indigo-600 font-bold text-2xl block">${daysUntil}</span><span class="text-[10px] text-gray-400 uppercase tracking-widest">Days Left</span>`;
+                
+                if (daysUntil === 0) {
+                    daysText = `<span class="text-pink-600 font-bold text-xl uppercase animate-pulse block">Today!</span>`;
+                    cardColor = "bg-gradient-to-b from-pink-50 to-white border-pink-200 shadow-md ring-2 ring-pink-100";
+                } else if (daysUntil === 1) {
+                    daysText = `<span class="text-indigo-600 font-bold text-xl block">Tomorrow</span>`;
+                }
+
+                const div = document.createElement('div');
+                // Updated Card Style: Vertical flex, Aspect Ratio 2/3, Centered content
+                div.className = `${cardColor} p-4 rounded-2xl shadow-sm border flex flex-col justify-between items-center text-center birthday-card cursor-pointer relative overflow-hidden`;
+                div.onclick = () => openEditModal(person);
+                
+                div.innerHTML = `
+                    <div class="mt-2 w-14 h-14 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xl shadow-inner mb-2">
+                        ${person.name.charAt(0).toUpperCase()}
+                    </div>
+                    
+                    <div class="flex-1 flex flex-col justify-center w-full overflow-hidden px-1">
+                        <h3 class="font-bold text-gray-800 text-lg leading-tight truncate w-full">${person.name}</h3>
+                        <p class="text-xs text-gray-500 font-medium mt-1 bg-gray-100 py-1 px-2 rounded-full mx-auto inline-block">${dateDisplay}</p>
+                    </div>
+                    
+                    <div class="mt-3 w-full border-t border-gray-100 pt-3">
+                        ${daysText}
+                    </div>
+                `;
+                listEl.appendChild(div);
+            });
+            
+            checkNotifications();
+        }
+
+        // --- Form & Modal ---
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('editId').value;
+            const name = document.getElementById('nameInput').value.trim();
+            const date = document.getElementById('dateInput').value;
+
+            // --- 1. DUPLICATE CHECK ---
+            // Check if ANY existing birthday has same Name AND Date, excluding current ID (if editing)
+            const isDuplicate = birthdays.some(b => 
+                b.name.toLowerCase() === name.toLowerCase() && 
+                b.date === date && 
+                b.id !== id
+            );
+
+            if (isDuplicate) {
+                showToast('Duplicate: This birthday already exists!', true);
+                return; // Stop execution, do not save, do not close modal
+            }
+
+            const bdayObject = {
+                id: id || (Date.now() + Math.random().toString(16).slice(2)),
+                name, 
+                date
+            };
+
+            saveData(bdayObject);
+            showToast(id ? 'Birthday updated!' : 'Birthday added!');
+            
+            // --- 2. CLOSE MODAL ---
+            // Explicitly call close modal after successful save
+            closeModal();
+        }
+
+        function deleteBirthday() {
+            const id = document.getElementById('editId').value;
+            if (id && confirm("Delete this birthday?")) {
+                saveData(null, true, id);
+                closeModal();
+                showToast('Birthday deleted');
+            }
+        }
+
+        function openModal() {
+            document.getElementById('birthdayForm').reset();
+            document.getElementById('editId').value = '';
+            document.getElementById('modalTitle').textContent = 'Add Birthday';
+            document.getElementById('deleteBtn').classList.add('hidden');
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function openEditModal(person) {
+            document.getElementById('editId').value = person.id;
+            document.getElementById('nameInput').value = person.name;
+            document.getElementById('dateInput').value = person.date;
+            document.getElementById('modalTitle').textContent = 'Edit Birthday';
+            document.getElementById('deleteBtn').classList.remove('hidden');
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.add('hidden');
+        }
+        function closeModalOutside(e) {
+            if(e.target.id === 'modalOverlay') closeModal();
+        }
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toastIcon');
+            
+            document.getElementById('toastMsg').textContent = msg;
+            
+            if(isError) {
+                icon.className = "fa-solid fa-triangle-exclamation text-red-500";
+            } else {
+                icon.className = "fa-solid fa-check-circle text-green-400";
+            }
+
+            toast.style.transform = 'translateY(0)';
+            setTimeout(() => toast.style.transform = 'translateY(-10rem)', 3000);
+        }
+
+        // --- Notifications ---
+        
+        function requestNotificationPermission() {
+            if (!("Notification" in window)) return alert("Notifications not supported");
+            Notification.requestPermission().then(p => {
+                if(p === "granted") {
+                    showToast("Notifications enabled!");
+                    checkNotifications();
+                }
+            });
+        }
+
+        function checkNotifications() {
+            if (Notification.permission !== "granted") return;
+            const today = new Date();
+            birthdays.forEach(person => {
+                const bday = new Date(person.date);
+                if (bday.getMonth() === today.getMonth() && bday.getDate() === today.getDate()) {
+                    const notifKey = `notified-${person.id}-${today.getFullYear()}`;
+                    if(!sessionStorage.getItem(notifKey)) {
+                        new Notification("It's a Birthday! 🎂", { body: `Today is ${person.name}'s birthday!` });
+                        sessionStorage.setItem(notifKey, 'true');
+                    }
+                }
+            });
+        }
+
+        // --- Dynamic PWA Manifest ---
+        function setupManifest() {
+            const manifest = {
+                "name": "Birthday Reminder",
+                "short_name": "Birthdays",
+                "display": "standalone",
+                "background_color": "#f3f4f6",
+                "theme_color": "#4f46e5",
+                "icons": [{
+                    "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%234f46e5' d='M256 0C114.6 0 0 114.6 0 256s114.6 256 256 256 256-114.6 256-256S397.4 0 256 0z'/%3E%3Cpath fill='white' d='M192 128c0-17.7 14.3-32 32-32s32 14.3 32 32v27.8c0 10.1-4.5 19.6-12.3 26.2l-12.2 10.2c-7.2 6-11.5 15-11.5 24.4v42.5c0 8.2 3.8 16 10.2 21.1l11.5 9.1c7.2 5.8 11.5 14.6 11.5 23.9V352c0 17.7-14.3 32-32 32s-32-14.3-32-32v-70.8c0-9.2 4.3-17.9 11.5-23.7l11.5-9.2c6.4-5.1 10.2-12.9 10.2-21.1V183c0-9.4-4.3-18.4-11.5-24.4l-12.2-10.2c-7.8-6.6-12.3-16.1-12.3-26.2V128zm128 0c0-17.7 14.3-32 32-32s32 14.3 32 32v27.8c0 10.1-4.5 19.6-12.3 26.2l-12.2 10.2c-7.2 6-11.5 15-11.5 24.4v42.5c0 8.2 3.8 16 10.2 21.1l11.5 9.1c7.2 5.8 11.5 14.6 11.5 23.9V352c0 17.7-14.3 32-32 32s-32-14.3-32-32v-70.8c0-9.2 4.3-17.9 11.5-23.7l11.5-9.2c6.4-5.1 10.2-12.9 10.2-21.1V183c0-9.4-4.3-18.4-11.5-24.4l-12.2-10.2c-7.8-6.6-12.3-16.1-12.3-26.2V128z'/%3E%3C/svg%3E",
+                    "sizes": "192x192",
+                    "type": "image/svg+xml"
+                }]
+            };
+            const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = URL.createObjectURL(blob);
+            document.head.appendChild(link);
+        }
+    </script>
+</body>
+</html>
