@@ -135,6 +135,31 @@
         </div>
     </header>
 
+    <!-- Install App Banner -->
+    <div id="install-banner"
+        class="hidden bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 shadow-lg z-20">
+        <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 flex-1">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-download text-blue-600 text-lg"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold text-sm">Install Moments</p>
+                    <p class="text-xs text-blue-100">Add to home screen for quick access</p>
+                </div>
+            </div>
+            <div class="flex gap-2 flex-shrink-0">
+                <button onclick="installApp()"
+                    class="bg-white text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-50 active:scale-95 transition">
+                    Install
+                </button>
+                <button onclick="dismissInstallBanner()" class="text-white hover:text-blue-100 p-2">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Content -->
     <main class="px-4 w-full max-w-7xl mx-auto" id="appContent">
         <!-- Empty State -->
@@ -224,30 +249,7 @@
         <span id="toastMsg" class="font-medium text-sm">Action Successful</span>
     </div>
 
-    <!-- Install App Banner -->
-    <div id="install-banner"
-        class="hidden bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 shadow-lg z-20">
-        <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3 flex-1">
-                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                    <i class="fa-solid fa-download text-blue-600 text-lg"></i>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <p class="font-bold text-sm">Install Moments</p>
-                    <p class="text-xs text-blue-100">Add to home screen for quick access</p>
-                </div>
-            </div>
-            <div class="flex gap-2 flex-shrink-0">
-                <button onclick="installApp()"
-                    class="bg-white text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-50 active:scale-95 transition">
-                    Install
-                </button>
-                <button onclick="dismissInstallBanner()" class="text-white hover:text-blue-100 p-2">
-                    <i class="fa-solid fa-xmark text-lg"></i>
-                </button>
-            </div>
-        </div>
-    </div>
+
 
     <script>
         // ==========================================
