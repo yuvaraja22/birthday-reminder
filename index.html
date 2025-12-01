@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Birthday Reminder</title>
+    <title>Moments</title>
     <link rel="icon" href="icon.png" type="image/png">
 
     <!-- PWA Settings -->
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Birthdays">
+    <meta name="apple-mobile-web-app-title" content="Moments">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -87,7 +87,7 @@
             <div>
                 <p class="text-indigo-200 text-xs font-bold uppercase tracking-wider" id="currentDateDisplay">Loading...
                 </p>
-                <h1 class="text-3xl font-bold mt-1">Birthdays</h1>
+                <h1 class="text-3xl font-bold mt-1">Moments</h1>
                 <p id="storage-indicator" class="text-xs text-indigo-200 mt-1 flex items-center gap-1">
                     <i class="fa-solid fa-database"></i> <span>Local Storage</span>
                 </p>
@@ -127,7 +127,7 @@
         <!-- Empty State -->
         <div id="emptyState" class="hidden flex flex-col items-center justify-center mt-20 text-gray-400">
             <i class="fa-regular fa-calendar-plus text-6xl mb-4 text-gray-300"></i>
-            <p class="text-lg font-medium text-gray-500">No birthdays yet!</p>
+            <p class="text-lg font-medium text-gray-500">No moments yet!</p>
             <p class="text-sm">Tap + to add one.</p>
         </div>
 
@@ -150,7 +150,7 @@
         <div id="modalContent"
             class="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl p-6 modal-animate max-w-md mx-auto w-full">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-gray-800" id="modalTitle">Add Birthday</h2>
+                <h2 class="text-xl font-bold text-gray-800" id="modalTitle">Add Moment</h2>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                     <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
@@ -426,7 +426,7 @@
             );
 
             if (isDuplicate) {
-                showToast('Duplicate: This birthday already exists!', true);
+                showToast('Duplicate: This moment already exists!', true);
                 return; // Stop execution, do not save, do not close modal
             }
 
@@ -437,7 +437,7 @@
             };
 
             saveData(bdayObject);
-            showToast(id ? 'Birthday updated!' : 'Birthday added!');
+            showToast(id ? 'Moment updated!' : 'Moment added!');
 
             // --- 2. CLOSE MODAL ---
             // Explicitly call close modal after successful save
@@ -449,14 +449,14 @@
             if (id && confirm("Delete this birthday?")) {
                 saveData(null, true, id);
                 closeModal();
-                showToast('Birthday deleted');
+                showToast('Moment deleted');
             }
         }
 
         function openModal() {
             document.getElementById('birthdayForm').reset();
             document.getElementById('editId').value = '';
-            document.getElementById('modalTitle').textContent = 'Add Birthday';
+            document.getElementById('modalTitle').textContent = 'Add Moment';
             document.getElementById('deleteBtn').classList.add('hidden');
             document.getElementById('modalOverlay').classList.remove('hidden');
         }
@@ -465,7 +465,7 @@
             document.getElementById('editId').value = person.id;
             document.getElementById('nameInput').value = person.name;
             document.getElementById('dateInput').value = person.date;
-            document.getElementById('modalTitle').textContent = 'Edit Birthday';
+            document.getElementById('modalTitle').textContent = 'Edit Moment';
             document.getElementById('deleteBtn').classList.remove('hidden');
             document.getElementById('modalOverlay').classList.remove('hidden');
         }
@@ -513,7 +513,7 @@
                 if (bday.getMonth() === today.getMonth() && bday.getDate() === today.getDate()) {
                     const notifKey = `notified-${person.id}-${today.getFullYear()}`;
                     if (!sessionStorage.getItem(notifKey)) {
-                        new Notification("It's a Birthday! 🎂", { body: `Today is ${person.name}'s birthday!` });
+                        new Notification("Special Day! 🎉", { body: `Today is ${person.name}'s special day!` });
                         sessionStorage.setItem(notifKey, 'true');
                     }
                 }
@@ -523,8 +523,8 @@
         // --- Dynamic PWA Manifest ---
         function setupManifest() {
             const manifest = {
-                "name": "Birthday Reminder",
-                "short_name": "Birthdays",
+                "name": "Moments",
+                "short_name": "Moments",
                 "display": "standalone",
                 "background_color": "#f3f4f6",
                 "theme_color": "#4f46e5",
