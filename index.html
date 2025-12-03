@@ -499,6 +499,7 @@
             updateCurrentDate();
             setupManifest();
             loadNotificationSettings();
+            updateAuthUI(currentUser); // Initialize UI state
             if (!isFirebaseReady) loadFromLocal();
         });
 
