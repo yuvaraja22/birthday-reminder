@@ -95,8 +95,6 @@
         /* Card Interactions */
         .birthday-card {
             transition: transform 0.2s, box-shadow 0.2s;
-            aspect-ratio: 2/3;
-            /* Enforce 4x6 portrait ratio */
         }
 
         .birthday-card:active {
@@ -739,8 +737,41 @@
                 }
 
                 const div = document.createElement('div');
-                div.className = `${cardColor} p-4 md:p-5 rounded-2xl shadow-sm border cursor-pointer hover:shadow-md transition-all duration-200 flex flex-row md:flex-col gap-3 md:gap-4 items-center md:items-start relative group`;
-                div.onclick = () => openEditModal(person);
+                div.className = `birthday-card ${cardColor} p-4 md:p-5 rounded-2xl shadow-sm border cursor-pointer hover:shadow-md transition-all duration-200 flex flex-row md:flex-col gap-3 md:gap-4 items-center md:items-start relative group`;
+
+                // Toggle logic
+                div.onclick = (e) => {
+                    if (e.target.closest('button')) return; // Ignore button clicks
+
+                    const buttons = div.querySelector('.action-buttons');
+                    const isCurrentlyHidden = buttons.classList.contains('hidden');
+
+                    // Reset all
+                    document.querySelectorAll('.birthday-card').forEach(c => {
+                        const b = c.querySelector('.action-buttons');
+                        if (b) b.classList.add('hidden');
+                        c.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
+                        // Restore pink ring if it was today's card
+                        if (c.dataset.isToday === "true") {
+                            c.classList.add('ring-2', 'ring-pink-100');
+                        }
+                    });
+
+                    // Toggle current
+                    if (isCurrentlyHidden) {
+                        buttons.classList.remove('hidden');
+                        // Remove pink ring to avoid conflict if we are adding primary ring
+                        div.classList.remove('ring-pink-100');
+                        div.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+                    } else {
+                        // If we are hiding, restore pink ring if needed
+                        if (div.dataset.isToday === "true") {
+                            div.classList.add('ring-2', 'ring-pink-100');
+                        }
+                    }
+                };
+
+                if (daysUntil === 0) div.dataset.isToday = "true";
 
                 // Icon and Label Logic
                 let iconHtml = '<i class="fa-solid fa-cake-candles"></i>';
@@ -783,11 +814,33 @@
                     }
                         </div>
                     </div>
+
+                    <div class="action-buttons hidden flex gap-1 transition-opacity ml-2 md:ml-0 md:absolute md:top-5 md:right-5">
+                        <button onclick="editBirthday('${person.id}')" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-colors shadow-sm border border-slate-100" title="Edit">
+                            <i class="fa-solid fa-pen text-xs"></i>
+                        </button>
+                        <button onclick="deleteBirthdayById('${person.id}')" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors shadow-sm border border-slate-100" title="Delete">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                    </div>
                 `;
                 listEl.appendChild(div);
             });
 
             checkNotifications();
+        }
+
+        // --- Helper Functions for Card Actions ---
+        function editBirthday(id) {
+            const person = birthdays.find(b => b.id === id);
+            if (person) openEditModal(person);
+        }
+
+        function deleteBirthdayById(id) {
+            if (confirm("Delete this moment?")) {
+                saveData(null, true, id);
+                showToast('Moment deleted');
+            }
         }
 
         // --- Form & Modal ---
