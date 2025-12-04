@@ -110,13 +110,11 @@ exports.sendBirthdayReminders = functions.pubsub
                                 message = `📅 ${birthday.name}'s ${eventType} is in ${days} day${days > 1 ? 's' : ''}!`;
                             }
 
-                            // Send to all user's FCM tokens
+                            // Send data-only message (service worker will display notification)
                             const payload = {
-                                notification: {
-                                    title: 'Moments Reminder 🎉',
-                                    body: message
-                                },
                                 data: {
+                                    title: 'Moments Reminder 🎉',
+                                    body: message,
                                     tag: `moment-${bdayDoc.id}`,
                                     personId: bdayDoc.id,
                                     personName: birthday.name
@@ -214,10 +212,13 @@ exports.testNotification = functions.https.onRequest(async (req, res) => {
             return;
         }
 
+        // Use data-only message (no 'notification' key) so FCM doesn't auto-display
+        // The service worker will handle showing the notification
         const payload = {
-            notification: {
+            data: {
                 title: 'Test Notification 🧪',
-                body: message
+                body: message,
+                tag: 'test-notification'
             }
         };
 

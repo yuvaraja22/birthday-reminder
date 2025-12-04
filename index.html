@@ -547,9 +547,9 @@
                     if (statusEl) statusEl.textContent = 'Token Generated!';
                     if (tokenEl) tokenEl.textContent = token;
 
-                    // Save token to user's document in Firestore
+                    // Replace all tokens with just the current one (prevents duplicates)
                     await db.collection('users').doc(currentUser.uid).set({
-                        fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
+                        fcmTokens: [token],
                         lastTokenUpdate: new Date().toISOString()
                     }, { merge: true });
                     console.log('FCM token saved to Firestore');

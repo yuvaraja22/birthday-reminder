@@ -21,9 +21,10 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] Received background message:', payload);
 
-    const notificationTitle = payload.notification?.title || 'Moments Reminder 🎉';
+    // Read from data payload (not notification, to prevent duplicates)
+    const notificationTitle = payload.data?.title || 'Moments Reminder 🎉';
     const notificationOptions = {
-        body: payload.notification?.body || 'You have an upcoming moment!',
+        body: payload.data?.body || 'You have an upcoming moment!',
         icon: '/icon.png',
         badge: '/icon.png',
         tag: payload.data?.tag || 'moment-reminder',
@@ -58,9 +59,9 @@ self.addEventListener('notificationclick', (event) => {
                         return client.focus();
                     }
                 }
-                // Otherwise, open a new window
+                // Otherwise, open a new window (use relative path for GitHub Pages)
                 if (clients.openWindow) {
-                    return clients.openWindow('/');
+                    return clients.openWindow('./index.html');
                 }
             })
     );
