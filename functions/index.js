@@ -163,6 +163,17 @@ exports.sendBirthdayReminders = functions.pubsub
  * Call this via: https://us-central1-YOUR_PROJECT.cloudfunctions.net/testNotification
  */
 exports.testNotification = functions.https.onRequest(async (req, res) => {
+    // Enable CORS
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Handle preflight request
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+
     // Only allow POST requests
     if (req.method !== 'POST') {
         res.status(405).send('Method not allowed');
