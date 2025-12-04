@@ -18,15 +18,18 @@ exports.sendBirthdayReminders = functions.pubsub
 
         const now = new Date();
         const currentHour = now.getHours();
+        console.log(`Current time: ${now.toISOString()}, Hour: ${currentHour}`);
 
         try {
             // Get all users
             const usersSnapshot = await db.collection('users').get();
+            console.log(`Found ${usersSnapshot.size} users`);
 
             for (const userDoc of usersSnapshot.docs) {
                 const userData = userDoc.data();
                 const userId = userDoc.id;
                 const fcmTokens = userData.fcmTokens || [];
+                console.log(`Processing user ${userId}, FCM tokens: ${fcmTokens.length}`);
 
                 if (fcmTokens.length === 0) {
                     console.log(`User ${userId} has no FCM tokens, skipping`);
@@ -45,6 +48,7 @@ exports.sendBirthdayReminders = functions.pubsub
                 if (settingsDoc.exists && settingsDoc.data().settings) {
                     notificationSettings = settingsDoc.data().settings;
                 }
+                console.log(`User ${userId} notification settings: enabled=${notificationSettings.enabled}, reminders=${JSON.stringify(notificationSettings.reminders)}`);
 
                 if (!notificationSettings.enabled) {
                     console.log(`User ${userId} has notifications disabled, skipping`);
@@ -54,27 +58,35 @@ exports.sendBirthdayReminders = functions.pubsub
                 // Get user's birthdays
                 const birthdaysSnapshot = await db.collection('users').doc(userId)
                     .collection('birthdays').get();
+                console.log(`User ${userId} has ${birthdaysSnapshot.size} birthdays`);
 
                 for (const bdayDoc of birthdaysSnapshot.docs) {
                     const birthday = bdayDoc.data();
                     const eventDate = new Date(birthday.date);
+                    console.log(`  Checking birthday: ${birthday.name}, date: ${birthday.date}`);
 
                     // Calculate this year's occurrence
                     let thisYearEvent = new Date(now.getFullYear(), eventDate.getMonth(), eventDate.getDate());
                     if (thisYearEvent < now) {
                         thisYearEvent.setFullYear(now.getFullYear() + 1);
                     }
+                    console.log(`  This year event: ${thisYearEvent.toISOString()}`);
 
                     // Check each reminder
                     for (const reminder of notificationSettings.reminders) {
                         // Calculate when this reminder should fire
                         const notificationTime = new Date(thisYearEvent.getTime() - (reminder.hours * 60 * 60 * 1000));
+                        console.log(`    Reminder: ${reminder.label} (${reminder.hours}h), notification time: ${notificationTime.toISOString()}`);
 
                         // Check if this is the hour to send the notification
-                        if (notificationTime.getDate() === now.getDate() &&
+                        const shouldSend = notificationTime.getDate() === now.getDate() &&
                             notificationTime.getMonth() === now.getMonth() &&
                             notificationTime.getFullYear() === now.getFullYear() &&
-                            notificationTime.getHours() === currentHour) {
+                            notificationTime.getHours() === currentHour;
+
+                        console.log(`    Should send now? ${shouldSend} (notif hour: ${notificationTime.getHours()}, current hour: ${currentHour})`);
+
+                        if (shouldSend) {
 
                             // Check if already sent (prevent duplicates)
                             const notifKey = `${userId}-${bdayDoc.id}-${reminder.id}-${now.getFullYear()}`;
