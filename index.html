@@ -1112,6 +1112,8 @@
             Notification.requestPermission().then(p => {
                 if (p === "granted") {
                     showToast("Notifications enabled!");
+                    // Save FCM token now that permission is granted
+                    saveFCMToken();
                     checkNotifications();
                 }
             });

@@ -9,9 +9,7 @@ let notificationSettings = {
 
 function loadNotificationSettings() {
     // Try localStorage first
-    const stored = localStorage.getItem('
-
-        - settings');
+    const stored = localStorage.getItem('notification-settings');
     if (stored) {
         try {
             notificationSettings = JSON.parse(stored);
