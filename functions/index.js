@@ -207,6 +207,8 @@ exports.testNotification = functions.https.onRequest(async (req, res) => {
         }
 
         const fcmTokens = userDoc.data().fcmTokens || [];
+        console.log(`User ${userId} has ${fcmTokens.length} FCM tokens`);
+
         if (fcmTokens.length === 0) {
             res.status(400).send('User has no FCM tokens');
             return;
@@ -219,14 +221,37 @@ exports.testNotification = functions.https.onRequest(async (req, res) => {
             }
         };
 
+        let successCount = 0;
+        let failedTokens = [];
+
         for (const token of fcmTokens) {
-            await messaging.send({
-                token: token,
-                ...payload
-            });
+            console.log(`Sending to token: ${token.substring(0, 20)}...`);
+            try {
+                await messaging.send({
+                    token: token,
+                    ...payload
+                });
+                successCount++;
+                console.log(`Success for token: ${token.substring(0, 20)}...`);
+            } catch (tokenError) {
+                console.error(`Failed for token ${token.substring(0, 20)}...: ${tokenError.message}`);
+                failedTokens.push(token);
+            }
         }
 
-        res.status(200).send(`Notification sent to ${fcmTokens.length} devices`);
+        // Remove failed tokens from user's document
+        if (failedTokens.length > 0) {
+            await db.collection('users').doc(userId).update({
+                fcmTokens: admin.firestore.FieldValue.arrayRemove(...failedTokens)
+            });
+            console.log(`Removed ${failedTokens.length} invalid tokens`);
+        }
+
+        if (successCount > 0) {
+            res.status(200).send(`Notification sent to ${successCount} device(s). ${failedTokens.length} invalid token(s) removed.`);
+        } else {
+            res.status(400).send(`All ${fcmTokens.length} tokens failed. They have been removed. User needs to re-enable notifications.`);
+        }
     } catch (error) {
         console.error('Test notification error:', error);
         res.status(500).send(`Error: ${error.message}`);
