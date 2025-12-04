@@ -702,8 +702,14 @@
         // --- Auth Functions ---
         function googleLogin() {
             if (!isFirebaseReady) return showAlert('Firebase not configured. Please try again later.', 'Error', 'error');
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch(err => showAlert(err.message, 'Login Error', 'error'));
+
+            // Set persistence to LOCAL to survive browser restarts
+            auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+                .then(() => {
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    return auth.signInWithPopup(provider);
+                })
+                .catch(err => showAlert(err.message, 'Login Error', 'error'));
         }
 
         function googleLogout() {
