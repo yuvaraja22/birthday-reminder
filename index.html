@@ -50,6 +50,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
 
     <style>
         body {
@@ -223,7 +224,7 @@
         </div>
 
         <!-- Birthday List -->
-        <div id="birthdayList" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div id="birthdayList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <!-- Cards injected via JS -->
         </div>
     </main>
@@ -379,6 +380,49 @@
         <span id="toastMsg" class="font-medium text-sm">Action Successful</span>
     </div>
 
+    <!-- Custom Alert Modal -->
+    <div id="alertModal"
+        class="fixed inset-0 bg-black/50 z-[60] hidden backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl modal-animate">
+            <div class="flex items-center gap-3 mb-4">
+                <div id="alertIconContainer"
+                    class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <i id="alertIcon" class="fa-solid fa-circle-info text-blue-600 text-lg"></i>
+                </div>
+                <h3 id="alertTitle" class="text-lg font-bold text-slate-900">Notice</h3>
+            </div>
+            <p id="alertMessage" class="text-slate-600 text-sm mb-6 leading-relaxed"></p>
+            <button onclick="closeAlertModal()"
+                class="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-blue-700 active:scale-95 transition shadow-lg shadow-blue-500/30">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirmModal"
+        class="fixed inset-0 bg-black/50 z-[60] hidden backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl modal-animate">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <i class="fa-solid fa-triangle-exclamation text-red-600 text-lg"></i>
+                </div>
+                <h3 id="confirmTitle" class="text-lg font-bold text-slate-900">Confirm</h3>
+            </div>
+            <p id="confirmMessage" class="text-slate-600 text-sm mb-6 leading-relaxed"></p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal(false)"
+                    class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 active:scale-95 transition">
+                    Cancel
+                </button>
+                <button onclick="closeConfirmModal(true)"
+                    class="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold hover:bg-red-600 active:scale-95 transition shadow-lg shadow-red-500/30">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
 
 
     <script>
@@ -394,14 +438,28 @@
             appId: "1:615674453004:web:3d4e6d8f9030645249a229",
             measurementId: "G-6ZVBS4Y7TX"
         };
-        let auth, db, currentUser = null;
+        let auth, db, messaging, currentUser = null;
         let isFirebaseReady = false;
+
+        // VAPID key for FCM - Get this from Firebase Console > Project Settings > Cloud Messaging
+        const VAPID_KEY = 'BD45PGDqiqWXGNpe3_G4tsgxbxADwfWJJdifpCvCUM7juuWnGMaghv5OQD3IGpyhajeZ4pUWLzX6HCSq-vrE3A4'; // TODO: Replace with actual VAPID key
 
         try {
             firebase.initializeApp(firebaseConfig);
             auth = firebase.auth();
             db = firebase.firestore();
+            messaging = firebase.messaging();
             isFirebaseReady = true;
+
+            // Register service worker for FCM
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered:', registration);
+                        messaging.useServiceWorker(registration);
+                    })
+                    .catch((err) => console.error('SW registration failed:', err));
+            }
 
             auth.onAuthStateChanged(async (user) => {
                 const wasLoggedOut = currentUser === null;
@@ -411,6 +469,8 @@
                 if (user && wasLoggedOut) {
                     // User just logged in - sync local data to cloud first
                     await syncLocalToCloud();
+                    // Also save FCM token for push notifications
+                    await saveFCMToken();
                 } else if (user) {
                     // User was already logged in - just load cloud data
                     loadFromCloud();
@@ -422,6 +482,42 @@
         } catch (e) {
             console.error("Firebase Init Error:", e);
             loadFromLocal();
+        }
+
+        // Save FCM token to Firestore for push notifications
+        async function saveFCMToken() {
+            if (!currentUser || !messaging) return;
+
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    console.log('Notification permission not granted');
+                    return;
+                }
+
+                // Get FCM token
+                const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+                if (token) {
+                    console.log('FCM Token:', token);
+                    // Save token to user's document in Firestore
+                    await db.collection('users').doc(currentUser.uid).set({
+                        fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
+                        lastTokenUpdate: new Date().toISOString()
+                    }, { merge: true });
+                    console.log('FCM token saved to Firestore');
+                }
+            } catch (err) {
+                console.error('Error getting FCM token:', err);
+            }
+        }
+
+        // Handle foreground messages
+        if (typeof messaging !== 'undefined' && messaging) {
+            messaging.onMessage((payload) => {
+                console.log('Foreground message received:', payload);
+                // Show toast notification for foreground messages
+                showToast(payload.notification?.body || 'You have a reminder!');
+            });
         }
 
 
@@ -447,7 +543,7 @@
             if (!deferredPrompt) {
                 // For iOS: Show instructions since PWA install is not available via API
                 if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-                    alert('To install:\n1. Tap the Share button\n2. Scroll and tap "Add to Home Screen"\n3. Tap "Add"');
+                    showAlert('To install:\n1. Tap the Share button\n2. Scroll and tap "Add to Home Screen"\n3. Tap "Add"', 'Install Instructions', 'info');
                 }
                 return;
             }
@@ -505,9 +601,9 @@
 
         // --- Auth Functions ---
         function googleLogin() {
-            if (!isFirebaseReady) return alert("Firebase not configured.");
+            if (!isFirebaseReady) return showAlert('Firebase not configured. Please try again later.', 'Error', 'error');
             const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch(err => alert(err.message));
+            auth.signInWithPopup(provider).catch(err => showAlert(err.message, 'Login Error', 'error'));
         }
 
         function googleLogout() {
@@ -738,7 +834,7 @@
                 }
 
                 const div = document.createElement('div');
-                div.className = `birthday-card ${cardColor} p-4 md:p-5 rounded-2xl shadow-sm border cursor-pointer hover:shadow-md transition-all duration-200 flex flex-row md:flex-col gap-3 md:gap-4 items-center md:items-start relative group`;
+                div.className = `birthday-card ${cardColor} p-4 rounded-2xl shadow-sm border cursor-pointer hover:shadow-md transition-all duration-200 flex flex-row gap-3 items-center relative group`;
 
                 // Toggle logic
                 div.onclick = (e) => {
@@ -790,14 +886,14 @@
                 }
 
                 div.innerHTML = `
-                    <div class="flex justify-between items-center md:items-start md:w-full">
-                        <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl ${iconBg} border flex items-center justify-center text-lg md:text-xl shadow-sm flex-shrink-0">
-                            ${iconHtml}
-                        </div>
+                    <!-- Icon -->
+                    <div class="w-10 h-10 rounded-xl ${iconBg} border flex items-center justify-center text-lg shadow-sm flex-shrink-0">
+                        ${iconHtml}
                     </div>
                     
-                    <div class="flex-1 min-w-0 md:w-full">
-                        <h3 class="font-bold text-slate-800 text-base md:text-lg leading-tight truncate">${person.name}</h3>
+                    <!-- Name & Type -->
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold text-slate-800 text-base leading-tight truncate">${person.name}</h3>
                         <div class="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
                             <span class="bg-slate-100 px-2 py-0.5 rounded text-slate-600">${typeLabel}</span>
                             <span>•</span>
@@ -805,18 +901,20 @@
                         </div>
                     </div>
 
-                    <div class="md:mt-auto md:pt-3 md:border-t md:border-slate-50 flex justify-end items-center md:w-full">
+                    <!-- Days Left -->
+                    <div class="flex items-center justify-end min-w-[70px]">
                         <div class="text-right">
                             ${daysUntil === 0 ?
                         `<span class="text-pink-600 font-bold text-sm uppercase animate-pulse block">Today!</span>` :
                         daysUntil === 1 ?
                             `<span class="text-primary font-bold text-sm block">Tomorrow</span>` :
-                            `<span class="text-primary font-bold text-lg md:text-xl block">${daysUntil}</span><span class="text-[10px] text-slate-400 uppercase tracking-widest block md:inline">Days Left</span>`
+                            `<span class="text-primary font-bold text-lg block">${daysUntil}</span><span class="text-[10px] text-slate-400 uppercase tracking-widest block">Days</span>`
                     }
                         </div>
                     </div>
 
-                    <div class="action-buttons hidden flex gap-1 transition-opacity ml-2 md:ml-0 md:absolute md:top-5 md:right-5">
+                    <!-- Action Buttons -->
+                    <div class="action-buttons hidden flex gap-1 transition-opacity ml-2">
                         <button onclick="editBirthday('${person.id}')" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-colors shadow-sm border border-slate-100" title="Edit">
                             <i class="fa-solid fa-pen text-xs"></i>
                         </button>
@@ -838,10 +936,10 @@
         }
 
         function deleteBirthdayById(id) {
-            if (confirm("Delete this moment?")) {
+            showConfirm('Are you sure you want to delete this moment?', () => {
                 saveData(null, true, id);
                 showToast('Moment deleted');
-            }
+            });
         }
 
         // --- Form & Modal ---
@@ -886,10 +984,12 @@
 
         function deleteBirthday() {
             const id = document.getElementById('editId').value;
-            if (id && confirm("Delete this birthday?")) {
-                saveData(null, true, id);
-                closeModal();
-                showToast('Moment deleted');
+            if (id) {
+                showConfirm('Are you sure you want to delete this moment?', () => {
+                    saveData(null, true, id);
+                    closeModal();
+                    showToast('Moment deleted');
+                });
             }
         }
 
@@ -960,10 +1060,55 @@
             setTimeout(() => toast.style.transform = 'translateY(-10rem)', 3000);
         }
 
+        // --- Custom Alert/Confirm Modals ---
+        let confirmCallback = null;
+
+        function showAlert(message, title = 'Notice', type = 'info') {
+            const modal = document.getElementById('alertModal');
+            const iconContainer = document.getElementById('alertIconContainer');
+            const icon = document.getElementById('alertIcon');
+
+            document.getElementById('alertMessage').textContent = message;
+            document.getElementById('alertTitle').textContent = title;
+
+            // Set icon based on type
+            if (type === 'error') {
+                iconContainer.className = 'w-10 h-10 rounded-full bg-red-100 flex items-center justify-center';
+                icon.className = 'fa-solid fa-circle-exclamation text-red-600 text-lg';
+            } else if (type === 'warning') {
+                iconContainer.className = 'w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center';
+                icon.className = 'fa-solid fa-triangle-exclamation text-amber-600 text-lg';
+            } else {
+                iconContainer.className = 'w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center';
+                icon.className = 'fa-solid fa-circle-info text-blue-600 text-lg';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeAlertModal() {
+            document.getElementById('alertModal').classList.add('hidden');
+        }
+
+        function showConfirm(message, callback, title = 'Confirm Delete') {
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmTitle').textContent = title;
+            confirmCallback = callback;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal(confirmed) {
+            document.getElementById('confirmModal').classList.add('hidden');
+            if (confirmCallback && confirmed) {
+                confirmCallback();
+            }
+            confirmCallback = null;
+        }
+
         // --- Notifications ---
 
         function requestNotificationPermission() {
-            if (!("Notification" in window)) return alert("Notifications not supported");
+            if (!("Notification" in window)) return showAlert('Notifications are not supported in this browser.', 'Not Supported', 'warning');
             Notification.requestPermission().then(p => {
                 if (p === "granted") {
                     showToast("Notifications enabled!");

@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can only read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // User's birthdays collection
+      match /birthdays/{birthdayId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // User's settings collection
+      match /settings/{settingId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Sent notifications - allow Cloud Functions to write, users to read their own
+    match /sentNotifications/{notificationId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only Cloud Functions can write
+    }
+  }
+}
