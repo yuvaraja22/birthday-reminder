@@ -16,9 +16,18 @@ exports.sendBirthdayReminders = functions.pubsub
     .onRun(async (context) => {
         console.log('Running birthday reminder check...');
 
+        // Get current time in IST
         const now = new Date();
-        const currentHour = now.getHours();
-        console.log(`Current time: ${now.toISOString()}, Hour: ${currentHour}`);
+        const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+        const istNow = new Date(now.getTime() + istOffset);
+
+        // Extract IST date components
+        const currentHour = istNow.getUTCHours();
+        const currentDate = istNow.getUTCDate();
+        const currentMonth = istNow.getUTCMonth();
+        const currentYear = istNow.getUTCFullYear();
+
+        console.log(`UTC time: ${now.toISOString()}, IST time: ${istNow.toISOString()}, IST Hour: ${currentHour}`);
 
         try {
             // Get all users
@@ -65,26 +74,79 @@ exports.sendBirthdayReminders = functions.pubsub
                     const eventDate = new Date(birthday.date);
                     console.log(`  Checking birthday: ${birthday.name}, date: ${birthday.date}`);
 
-                    // Calculate this year's occurrence
-                    let thisYearEvent = new Date(now.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-                    if (thisYearEvent < now) {
-                        thisYearEvent.setFullYear(now.getFullYear() + 1);
+                    // Calculate this year's occurrence (using IST date components)
+                    const eventMonth = eventDate.getMonth();
+                    const eventDay = eventDate.getDate();
+
+                    // Create event date for this year at midnight IST
+                    // We compare using month/day directly
+                    let thisYearEventMonth = eventMonth;
+                    let thisYearEventDay = eventDay;
+                    let thisYearEventYear = currentYear;
+
+                    // Check if event has passed this year (compare in IST)
+                    if (eventMonth < currentMonth ||
+                        (eventMonth === currentMonth && eventDay < currentDate)) {
+                        thisYearEventYear = currentYear + 1;
                     }
-                    console.log(`  This year event: ${thisYearEvent.toISOString()}`);
+                    console.log(`  This year event: ${thisYearEventYear}-${thisYearEventMonth + 1}-${thisYearEventDay}`);
 
                     // Check each reminder
                     for (const reminder of notificationSettings.reminders) {
                         // Calculate when this reminder should fire
-                        const notificationTime = new Date(thisYearEvent.getTime() - (reminder.hours * 60 * 60 * 1000));
-                        console.log(`    Reminder: ${reminder.label} (${reminder.hours}h), notification time: ${notificationTime.toISOString()}`);
+                        // The event is at midnight IST on the event day
+                        // reminder.hours is how many hours BEFORE the event to notify
 
-                        // Check if this is the hour to send the notification
-                        const shouldSend = notificationTime.getDate() === now.getDate() &&
-                            notificationTime.getMonth() === now.getMonth() &&
-                            notificationTime.getFullYear() === now.getFullYear() &&
-                            notificationTime.getHours() === currentHour;
+                        // Calculate notification date/hour in IST
+                        // Start from event date at midnight (hour 0) and subtract reminder.hours
+                        const hoursToSubtract = reminder.hours;
+                        const daysToSubtract = Math.floor(hoursToSubtract / 24);
+                        const remainingHours = hoursToSubtract % 24;
 
-                        console.log(`    Should send now? ${shouldSend} (notif hour: ${notificationTime.getHours()}, current hour: ${currentHour})`);
+                        // Notification day
+                        let notifDay = thisYearEventDay - daysToSubtract;
+                        let notifMonth = thisYearEventMonth;
+                        let notifYear = thisYearEventYear;
+
+                        // Handle month/year underflow
+                        if (notifDay <= 0) {
+                            notifMonth--;
+                            if (notifMonth < 0) {
+                                notifMonth = 11;
+                                notifYear--;
+                            }
+                            // Get days in the previous month
+                            const daysInPrevMonth = new Date(notifYear, notifMonth + 1, 0).getDate();
+                            notifDay += daysInPrevMonth;
+                        }
+
+                        // Notification hour - if subtracting hours from midnight
+                        let notifHour = (24 - remainingHours) % 24;
+                        if (remainingHours > 0) {
+                            // If we're subtracting hours, we need to go back one more day
+                            notifDay--;
+                            if (notifDay <= 0) {
+                                notifMonth--;
+                                if (notifMonth < 0) {
+                                    notifMonth = 11;
+                                    notifYear--;
+                                }
+                                const daysInPrevMonth = new Date(notifYear, notifMonth + 1, 0).getDate();
+                                notifDay += daysInPrevMonth;
+                            }
+                        } else {
+                            notifHour = 0; // Midnight of the event day
+                        }
+
+                        console.log(`    Reminder: ${reminder.label} (${reminder.hours}h), notification: ${notifYear}-${notifMonth + 1}-${notifDay} at ${notifHour}:00 IST`);
+
+                        // Check if this is the exact date and hour to send the notification
+                        const shouldSend = notifDay === currentDate &&
+                            notifMonth === currentMonth &&
+                            notifYear === currentYear &&
+                            notifHour === currentHour;
+
+                        console.log(`    Should send now? ${shouldSend} (notif: ${notifYear}-${notifMonth + 1}-${notifDay} ${notifHour}:00, current: ${currentYear}-${currentMonth + 1}-${currentDate} ${currentHour}:00)`);
 
                         if (shouldSend) {
 
