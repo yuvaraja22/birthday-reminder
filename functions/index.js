@@ -14,7 +14,7 @@ exports.sendBirthdayReminders = functions.pubsub
     .schedule('0 * * * *')  // Runs at minute 0 of every hour
     .timeZone('Asia/Kolkata')  // IST timezone
     .onRun(async (context) => {
-        console.log('Running birthday reminder check...');
+        console.log('Running birthday reminder check... hehe');
 
         // Get current time in IST
         const now = new Date();
